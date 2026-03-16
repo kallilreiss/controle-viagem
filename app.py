@@ -22,6 +22,22 @@ def salvar(dados):
     with open(ARQUIVO,"w") as f:
         json.dump(dados,f)
 
+def garantir_colunas(df):
+
+    colunas = [
+        "cidade","pais","data","dias",
+        "lat","lon",
+        "km_motorhome","litros_motorhome","gasto_motorhome",
+        "km_moto","litros_moto","gasto_moto",
+        "pedagio","ferry","bus","aviao"
+    ]
+
+    for c in colunas:
+        if c not in df.columns:
+            df[c] = 0
+
+    return df
+
 dados = carregar()
 
 # -------------------------
@@ -57,17 +73,7 @@ if menu == "Dashboard":
 
         df = pd.DataFrame(dados)
 
-        # garantir colunas mesmo em dados antigos
-        colunas = [
-            "ferry","bus","aviao","pedagio",
-            "km_motorhome","km_moto",
-            "gasto_motorhome","gasto_moto",
-            "dias"
-        ]
-
-        for c in colunas:
-            if c not in df.columns:
-                df[c] = 0
+        df = garantir_colunas(df)
 
         total_km_motorhome = df["km_motorhome"].sum()
         total_km_moto = df["km_moto"].sum()
@@ -142,8 +148,8 @@ elif menu == "Registrar trecho":
 
     dias = st.number_input("Dias no local",0)
 
-    lat = st.number_input("Latitude")
-    lon = st.number_input("Longitude")
+    lat = st.number_input("Latitude",value=0.0)
+    lon = st.number_input("Longitude",value=0.0)
 
     st.subheader("Motorhome")
 
@@ -219,22 +225,22 @@ elif menu == "História da viagem":
         for t in dados:
 
             st.markdown(f"""
-### 📆 {t['data']}
-📍 {t['cidade']} - {t['pais']}
+### 📆 {t.get('data','')}
+📍 {t.get('cidade','')} - {t.get('pais','')}
 
 🚐 Motorhome  
-{round(t['km_motorhome'],2)} km  
-Diesel gasto: R$ {round(t['gasto_motorhome'],2)}
+{round(t.get('km_motorhome',0),2)} km  
+Diesel gasto: R$ {round(t.get('gasto_motorhome',0),2)}
 
 🛵 Moto  
-{round(t['km_moto'],2)} km  
-Gasolina: R$ {round(t['gasto_moto'],2)}
+{round(t.get('km_moto',0),2)} km  
+Gasolina: R$ {round(t.get('gasto_moto',0),2)}
 
-🚧 Pedágio: R$ {round(t['pedagio'],2)}
+🚧 Pedágio: R$ {round(t.get('pedagio',0),2)}
 
-⛴ Ferry: R$ {round(t['ferry'],2)}  
-🚌 Bus: R$ {round(t['bus'],2)}  
-✈️ Avião: R$ {round(t['aviao'],2)}
+⛴ Ferry: R$ {round(t.get('ferry',0),2)}  
+🚌 Bus: R$ {round(t.get('bus',0),2)}  
+✈️ Avião: R$ {round(t.get('aviao',0),2)}
 
 ---
 """)
@@ -249,15 +255,25 @@ elif menu == "Mapa da viagem":
 
     if len(dados) == 0:
 
-        st.info("Sem dados de localização")
+        st.info("Sem dados")
 
     else:
 
         df = pd.DataFrame(dados)
 
+        df = garantir_colunas(df)
+
         if "lat" in df.columns and "lon" in df.columns:
 
-            st.map(df[["lat","lon"]])
+            mapa = df[(df["lat"] != 0) & (df["lon"] != 0)]
+
+            if len(mapa) > 0:
+
+                st.map(mapa[["lat","lon"]])
+
+            else:
+
+                st.info("Nenhuma coordenada registrada")
 
 # -------------------------
 # ESTATÍSTICAS
@@ -275,11 +291,7 @@ elif menu == "Estatísticas":
 
         df = pd.DataFrame(dados)
 
-        if "gasto_motorhome" not in df.columns:
-            df["gasto_motorhome"] = 0
-
-        if "gasto_moto" not in df.columns:
-            df["gasto_moto"] = 0
+        df = garantir_colunas(df)
 
         combustivel = {
 
@@ -302,7 +314,7 @@ elif menu == "Backup da viagem":
 
     if len(dados) == 0:
 
-        st.info("Nenhum dado para backup")
+        st.info("Nenhum dado")
 
     else:
 
@@ -325,7 +337,7 @@ elif menu == "Backup da viagem":
 
             salvar(dados_restaurados)
 
-            st.success("Backup restaurado!")
+            st.success("Backup restaurado")
 
 # -------------------------
 # CONFIG
