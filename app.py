@@ -36,7 +36,7 @@ menu = st.sidebar.selectbox(
         "História da viagem",
         "Mapa da viagem",
         "Estatísticas",
-        "Exportar relatório",
+        "Backup da viagem",
         "Configurações"
     ]
 )
@@ -57,6 +57,18 @@ if menu == "Dashboard":
 
         df = pd.DataFrame(dados)
 
+        # garantir colunas mesmo em dados antigos
+        colunas = [
+            "ferry","bus","aviao","pedagio",
+            "km_motorhome","km_moto",
+            "gasto_motorhome","gasto_moto",
+            "dias"
+        ]
+
+        for c in colunas:
+            if c not in df.columns:
+                df[c] = 0
+
         total_km_motorhome = df["km_motorhome"].sum()
         total_km_moto = df["km_moto"].sum()
 
@@ -68,7 +80,14 @@ if menu == "Dashboard":
         total_bus = df["bus"].sum()
         total_aviao = df["aviao"].sum()
 
-        total_viagem = total_diesel + total_gasolina + total_pedagio + total_ferry + total_bus + total_aviao
+        total_viagem = (
+            total_diesel +
+            total_gasolina +
+            total_pedagio +
+            total_ferry +
+            total_bus +
+            total_aviao
+        )
 
         cidades = len(set(df["cidade"]))
         paises = len(set(df["pais"]))
@@ -184,7 +203,7 @@ elif menu == "Registrar trecho":
         st.success("Trecho registrado!")
 
 # -------------------------
-# HISTÓRIA DA VIAGEM
+# HISTÓRIA
 # -------------------------
 
 elif menu == "História da viagem":
@@ -236,7 +255,9 @@ elif menu == "Mapa da viagem":
 
         df = pd.DataFrame(dados)
 
-        st.map(df[["lat","lon"]])
+        if "lat" in df.columns and "lon" in df.columns:
+
+            st.map(df[["lat","lon"]])
 
 # -------------------------
 # ESTATÍSTICAS
@@ -254,7 +275,11 @@ elif menu == "Estatísticas":
 
         df = pd.DataFrame(dados)
 
-        st.subheader("Gastos combustível")
+        if "gasto_motorhome" not in df.columns:
+            df["gasto_motorhome"] = 0
+
+        if "gasto_moto" not in df.columns:
+            df["gasto_moto"] = 0
 
         combustivel = {
 
@@ -267,66 +292,40 @@ elif menu == "Estatísticas":
 
         st.bar_chart(df_g.set_index("tipo"))
 
-        st.subheader("KM por veículo")
-
-        kms = {
-
-            "Motorhome":df["km_motorhome"].sum(),
-            "Moto":df["km_moto"].sum()
-
-        }
-
-        df_k = pd.DataFrame(list(kms.items()),columns=["tipo","valor"])
-
-        st.bar_chart(df_k.set_index("tipo"))
-
-        st.subheader("📈 Evolução da viagem")
-
-        df["data"] = pd.to_datetime(df["data"])
-
-        df = df.sort_values("data")
-
-        df["km_total"] = df["km_motorhome"].cumsum()
-
-        df["gasto_total"] = (
-
-            df["gasto_motorhome"] +
-            df["gasto_moto"] +
-            df["pedagio"] +
-            df["ferry"] +
-            df["bus"] +
-            df["aviao"]
-
-        ).cumsum()
-
-        st.line_chart(df.set_index("data")[["km_total","gasto_total"]])
-
 # -------------------------
-# EXPORTAR
+# BACKUP
 # -------------------------
 
-elif menu == "Exportar relatório":
+elif menu == "Backup da viagem":
 
-    st.title("Exportar relatório")
+    st.title("💾 Backup da viagem")
 
     if len(dados) == 0:
 
-        st.info("Nenhum dado")
+        st.info("Nenhum dado para backup")
 
     else:
 
-        df = pd.DataFrame(dados)
-
-        csv = df.to_csv(index=False).encode("utf-8")
+        backup = json.dumps(dados).encode("utf-8")
 
         st.download_button(
-
-            "Baixar CSV",
-            csv,
-            "relatorio_viagem.csv",
-            "text/csv"
-
+            "Baixar backup da viagem",
+            backup,
+            "backup_viagem.json",
+            "application/json"
         )
+
+        st.subheader("Restaurar backup")
+
+        arquivo = st.file_uploader("Enviar backup")
+
+        if arquivo is not None:
+
+            dados_restaurados = json.load(arquivo)
+
+            salvar(dados_restaurados)
+
+            st.success("Backup restaurado!")
 
 # -------------------------
 # CONFIG
