@@ -1,96 +1,117 @@
 import streamlit as st
+import json
+import os
 import pandas as pd
 from datetime import date
-import os
 
 st.set_page_config(page_title="Controle de Viagem", layout="wide")
 
-ARQUIVO = "dados_viagem.csv"
+ARQUIVO = "dados_viagem.json"
 
-# Criar arquivo se não existir
-if not os.path.exists(ARQUIVO):
-    df = pd.DataFrame(columns=["data","cidade","categoria","descricao","valor","km"])
-    df.to_csv(ARQUIVO,index=False)
+# -------------------------
+# CARREGAR DADOS
+# -------------------------
 
-df = pd.read_csv(ARQUIVO)
+def carregar():
+    if os.path.exists(ARQUIVO):
+        with open(ARQUIVO,"r") as f:
+            return json.load(f)
+    return []
 
-# MENU LATERAL
+def salvar(dados):
+    with open(ARQUIVO,"w") as f:
+        json.dump(dados,f)
+
+dados = carregar()
+
 menu = st.sidebar.selectbox(
     "Menu",
     [
+        "Registrar trecho",
         "Dashboard",
-        "Registrar gasto",
         "Estatísticas",
-        "Diário da viagem",
-        "Planejamento de rota",
+        "Exportar relatório",
         "Configurações"
     ]
 )
 
 # =========================
+# REGISTRAR TRECHO
+# =========================
+
+if menu == "Registrar trecho":
+
+    st.title("Registrar trecho")
+
+    cidade = st.text_input("Cidade")
+    data = st.date_input("Data",value=date.today())
+    dias = st.number_input("Dias no local",0)
+
+    st.subheader("Motorhome")
+
+    km_motorhome = st.number_input("KM motorhome",0.0)
+    consumo_motorhome = st.number_input("Consumo MH (km/l)",0.1)
+    preco_diesel = st.number_input("Preço diesel",0.0)
+    pedagio = st.number_input("Pedágio",0.0)
+
+    st.subheader("Moto")
+
+    km_moto = st.number_input("KM moto",0.0)
+    consumo_moto = st.number_input("Consumo moto (km/l)",0.1)
+    preco_gasolina = st.number_input("Preço gasolina",0.0)
+
+    if st.button("Salvar"):
+
+        litros_motorhome = km_motorhome / consumo_motorhome
+        gasto_motorhome = litros_motorhome * preco_diesel
+
+        litros_moto = km_moto / consumo_moto
+        gasto_moto = litros_moto * preco_gasolina
+
+        trecho = {
+
+            "cidade":cidade,
+            "data":str(data),
+            "dias":dias,
+
+            "km_motorhome":km_motorhome,
+            "litros_motorhome":litros_motorhome,
+            "gasto_motorhome":gasto_motorhome,
+            "pedagio":pedagio,
+
+            "km_moto":km_moto,
+            "litros_moto":litros_moto,
+            "gasto_moto":gasto_moto
+        }
+
+        dados.append(trecho)
+        salvar(dados)
+
+        st.success("Trecho salvo!")
+
+# =========================
 # DASHBOARD
 # =========================
 
-if menu == "Dashboard":
+elif menu == "Dashboard":
 
-    st.title("🚐 Dashboard da Viagem")
+    st.title("Resumo da viagem")
 
-    total_gasto = df["valor"].sum()
+    total_km_motorhome = sum(t.get("km_motorhome",0) for t in dados)
+    total_km_moto = sum(t.get("km_moto",0) for t in dados)
 
-    total_km = df["km"].sum()
+    total_gasto_motorhome = sum(t.get("gasto_motorhome",0) for t in dados)
+    total_gasto_moto = sum(t.get("gasto_moto",0) for t in dados)
 
-    custo_km = 0
-    if total_km > 0:
-        custo_km = total_gasto / total_km
+    total_pedagio = sum(t.get("pedagio",0) for t in dados)
 
-    col1, col2, col3 = st.columns(3)
+    total_viagem = total_gasto_motorhome + total_gasto_moto + total_pedagio
 
-    col1.metric("Total gasto", f"R$ {total_gasto:.2f}")
-    col2.metric("KM rodados", f"{total_km} km")
-    col3.metric("Custo por KM", f"R$ {custo_km:.2f}")
+    col1,col2,col3 = st.columns(3)
 
-    st.subheader("Últimos registros")
-    st.dataframe(df.tail(10))
-
-
-# =========================
-# REGISTRAR GASTO
-# =========================
-
-elif menu == "Registrar gasto":
-
-    st.title("Registrar gasto")
-
-    data = st.date_input("Data", date.today())
-    cidade = st.text_input("Cidade")
-
-    categoria = st.selectbox(
-        "Categoria",
-        ["Combustível","Alimentação","Hospedagem","Manutenção","Passeio","Outros"]
-    )
-
-    descricao = st.text_input("Descrição")
-
-    valor = st.number_input("Valor", min_value=0.0)
-
-    km = st.number_input("KM rodados", min_value=0)
-
-    if st.button("Salvar gasto"):
-
-        novo = pd.DataFrame({
-            "data":[data],
-            "cidade":[cidade],
-            "categoria":[categoria],
-            "descricao":[descricao],
-            "valor":[valor],
-            "km":[km]
-        })
-
-        df2 = pd.concat([df,novo])
-        df2.to_csv(ARQUIVO,index=False)
-
-        st.success("Gasto registrado!")
-
+    col1.metric("KM Motorhome",round(total_km_motorhome,2))
+    col2.metric("KM Moto",round(total_km_moto,2))
+    col3.metric("Custo total",round(total_viagem,2))
 
 # =========================
 # ESTATÍSTICAS
@@ -98,72 +119,68 @@ elif menu == "Registrar gasto":
 
 elif menu == "Estatísticas":
 
-    st.title("Estatísticas da viagem")
+    st.title("Gráficos da viagem")
 
-    if len(df) == 0:
-        st.warning("Nenhum gasto registrado ainda.")
+    if len(dados) == 0:
+
+        st.warning("Nenhum dado registrado")
+
     else:
 
-        gasto_categoria = df.groupby("categoria")["valor"].sum()
+        df = pd.DataFrame(dados)
 
-        st.subheader("Gasto por categoria")
-        st.bar_chart(gasto_categoria)
+        st.subheader("Gasto combustível")
 
-        gasto_cidade = df.groupby("cidade")["valor"].sum()
+        gastos = {
+            "Motorhome": df["gasto_motorhome"].sum(),
+            "Moto": df["gasto_moto"].sum()
+        }
 
-        st.subheader("Gasto por cidade")
-        st.bar_chart(gasto_cidade)
+        grafico = pd.DataFrame(
+            list(gastos.items()),
+            columns=["Tipo","Valor"]
+        )
 
+        st.bar_chart(grafico.set_index("Tipo"))
 
-# =========================
-# DIÁRIO DA VIAGEM
-# =========================
+        st.subheader("KM percorridos")
 
-elif menu == "Diário da viagem":
+        kms = {
+            "Motorhome": df["km_motorhome"].sum(),
+            "Moto": df["km_moto"].sum()
+        }
 
-    st.title("Diário da viagem")
+        grafico_km = pd.DataFrame(
+            list(kms.items()),
+            columns=["Veículo","KM"]
+        )
 
-    cidade = st.text_input("Cidade visitada")
-    nota = st.text_area("O que aconteceu hoje?")
-
-    if st.button("Salvar no diário"):
-
-        with open("diario.txt","a") as f:
-            f.write(f"{date.today()} - {cidade} \n {nota}\n\n")
-
-        st.success("Diário salvo!")
-
-    if os.path.exists("diario.txt"):
-        st.subheader("Registros anteriores")
-
-        with open("diario.txt","r") as f:
-            st.text(f.read())
-
+        st.bar_chart(grafico_km.set_index("Veículo"))
 
 # =========================
-# PLANEJAMENTO DE ROTA
+# EXPORTAR RELATÓRIO
 # =========================
 
-elif menu == "Planejamento de rota":
+elif menu == "Exportar relatório":
 
-    st.title("Planejamento de rota")
+    st.title("Baixar relatório da viagem")
 
-    distancia = st.number_input("Distância da viagem (km)",min_value=0)
+    if len(dados) == 0:
 
-    consumo = st.number_input("Consumo do veículo (km/l)",min_value=1)
+        st.warning("Nenhum dado para exportar")
 
-    preco = st.number_input("Preço da gasolina",min_value=0.0)
+    else:
 
-    if st.button("Calcular custo"):
+        df = pd.DataFrame(dados)
 
-        litros = distancia / consumo
+        csv = df.to_csv(index=False).encode("utf-8")
 
-        custo = litros * preco
-
-        st.success(f"Litros necessários: {litros:.1f}")
-
-        st.success(f"Custo estimado: R$ {custo:.2f}")
-
+        st.download_button(
+            "Baixar relatório CSV",
+            csv,
+            "relatorio_viagem.csv",
+            "text/csv"
+        )
 
 # =========================
 # CONFIGURAÇÕES
@@ -171,13 +188,8 @@ elif menu == "Planejamento de rota":
 
 elif menu == "Configurações":
 
-    st.title("Configurações da viagem")
-
-    st.write("Aqui você pode limpar os dados.")
-
     if st.button("Apagar todos os dados"):
 
-        df = pd.DataFrame(columns=["data","cidade","categoria","descricao","valor","km"])
-        df.to_csv(ARQUIVO,index=False)
+        salvar([])
 
-        st.success("Dados apagados!")
+        st.success("Dados apagados")
