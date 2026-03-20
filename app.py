@@ -205,6 +205,4 @@ elif menu == "Configurações":
 
     if st.button("Apagar dados"):
         salvar([])
-        st.success("Dados apagados")git add .
-git commit -m "update1"
-git push
+        st.success("Dados apagados")
