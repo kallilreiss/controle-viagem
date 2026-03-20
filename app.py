@@ -3,10 +3,42 @@ import json
 import os
 import pandas as pd
 from datetime import date
+import requests
 
 st.set_page_config(page_title="Controle de Viagem Motorhome", layout="wide")
 
 ARQUIVO = "dados_viagem.json"
+
+# -------------------------
+# GEOLOCALIZAÇÃO AUTOMÁTICA
+# -------------------------
+
+def buscar_coordenadas(cidade, pais):
+
+    try:
+        url = "https://nominatim.openstreetmap.org/search"
+
+        params = {
+            "city": cidade,
+            "country": pais,
+            "format": "json"
+        }
+
+        headers = {
+            "User-Agent": "app-viagem"
+        }
+
+        response = requests.get(url, params=params, headers=headers)
+
+        data = response.json()
+
+        if len(data) > 0:
+            return float(data[0]["lat"]), float(data[0]["lon"])
+
+    except:
+        pass
+
+    return 0, 0
 
 # -------------------------
 # FUNÇÕES
@@ -27,8 +59,8 @@ def garantir_colunas(df):
     colunas = [
         "cidade","pais","data","dias",
         "lat","lon",
-        "km_motorhome","litros_motorhome","gasto_motorhome",
-        "km_moto","litros_moto","gasto_moto",
+        "km_motorhome","gasto_motorhome",
+        "km_moto","gasto_moto",
         "pedagio","ferry","bus","aviao"
     ]
 
@@ -72,7 +104,6 @@ if menu == "Dashboard":
     else:
 
         df = pd.DataFrame(dados)
-
         df = garantir_colunas(df)
 
         total_km_motorhome = df["km_motorhome"].sum()
@@ -81,18 +112,13 @@ if menu == "Dashboard":
         total_diesel = df["gasto_motorhome"].sum()
         total_gasolina = df["gasto_moto"].sum()
 
-        total_pedagio = df["pedagio"].sum()
-        total_ferry = df["ferry"].sum()
-        total_bus = df["bus"].sum()
-        total_aviao = df["aviao"].sum()
-
         total_viagem = (
             total_diesel +
             total_gasolina +
-            total_pedagio +
-            total_ferry +
-            total_bus +
-            total_aviao
+            df["pedagio"].sum() +
+            df["ferry"].sum() +
+            df["bus"].sum() +
+            df["aviao"].sum()
         )
 
         cidades = len(set(df["cidade"]))
@@ -102,10 +128,7 @@ if menu == "Dashboard":
 
         km_total = total_km_motorhome + total_km_moto
 
-        if km_total > 0:
-            custo_km = total_viagem / km_total
-        else:
-            custo_km = 0
+        custo_km = total_viagem / km_total if km_total > 0 else 0
 
         col1,col2,col3,col4 = st.columns(4)
 
@@ -116,22 +139,12 @@ if menu == "Dashboard":
 
         col1,col2,col3,col4 = st.columns(4)
 
-        col1.metric("📅 Dias de viagem", dias_total)
-        col2.metric("💰 Diesel total", f"R$ {round(total_diesel,2)}")
-        col3.metric("💰 Gasolina total", f"R$ {round(total_gasolina,2)}")
-        col4.metric("💰 Total viagem", f"R$ {round(total_viagem,2)}")
+        col1.metric("📅 Dias", dias_total)
+        col2.metric("💰 Diesel", f"R$ {round(total_diesel,2)}")
+        col3.metric("💰 Gasolina", f"R$ {round(total_gasolina,2)}")
+        col4.metric("💰 Total", f"R$ {round(total_viagem,2)}")
 
-        st.metric("💰 Custo por KM", f"R$ {round(custo_km,2)}")
-
-        st.subheader("🧠 Planejar próxima viagem")
-
-        km_planejado = st.number_input("KM que pretende rodar")
-
-        if km_total > 0:
-
-            estimativa = km_planejado * custo_km
-
-            st.metric("💰 Custo estimado", f"R$ {round(estimativa,2)}")
+        st.metric("💰 Custo/KM", f"R$ {round(custo_km,2)}")
 
 # -------------------------
 # REGISTRAR TRECHO
@@ -145,23 +158,19 @@ elif menu == "Registrar trecho":
     pais = st.text_input("País")
 
     data = st.date_input("Data",value=date.today())
-
     dias = st.number_input("Dias no local",0)
-
-    lat = st.number_input("Latitude",value=0.0)
-    lon = st.number_input("Longitude",value=0.0)
 
     st.subheader("Motorhome")
 
-    km_motorhome = st.number_input("KM rodados MH",0.0)
-    consumo_motorhome = st.number_input("Consumo MH (km/l)",0.1)
+    km_motorhome = st.number_input("KM MH",0.0)
+    consumo_motorhome = st.number_input("Consumo MH",0.1)
     preco_diesel = st.number_input("Preço diesel",0.0)
     pedagio = st.number_input("Pedágio",0.0)
 
     st.subheader("Moto")
 
     km_moto = st.number_input("KM moto",0.0)
-    consumo_moto = st.number_input("Consumo moto (km/l)",0.1)
+    consumo_moto = st.number_input("Consumo moto",0.1)
     preco_gasolina = st.number_input("Preço gasolina",0.0)
 
     st.subheader("Transportes")
@@ -171,6 +180,8 @@ elif menu == "Registrar trecho":
     aviao = st.number_input("Avião",0.0)
 
     if st.button("Salvar trecho"):
+
+        lat, lon = buscar_coordenadas(cidade, pais)
 
         litros_motorhome = km_motorhome / consumo_motorhome
         gasto_motorhome = litros_motorhome * preco_diesel
@@ -189,12 +200,10 @@ elif menu == "Registrar trecho":
             "lon":lon,
 
             "km_motorhome":km_motorhome,
-            "litros_motorhome":litros_motorhome,
             "gasto_motorhome":gasto_motorhome,
             "pedagio":pedagio,
 
             "km_moto":km_moto,
-            "litros_moto":litros_moto,
             "gasto_moto":gasto_moto,
 
             "ferry":ferry,
@@ -203,47 +212,9 @@ elif menu == "Registrar trecho":
         }
 
         dados.append(trecho)
-
         salvar(dados)
 
-        st.success("Trecho registrado!")
-
-# -------------------------
-# HISTÓRIA
-# -------------------------
-
-elif menu == "História da viagem":
-
-    st.title("📖 História da viagem")
-
-    if len(dados) == 0:
-
-        st.info("Nenhum trecho registrado")
-
-    else:
-
-        for t in dados:
-
-            st.markdown(f"""
-### 📆 {t.get('data','')}
-📍 {t.get('cidade','')} - {t.get('pais','')}
-
-🚐 Motorhome  
-{round(t.get('km_motorhome',0),2)} km  
-Diesel gasto: R$ {round(t.get('gasto_motorhome',0),2)}
-
-🛵 Moto  
-{round(t.get('km_moto',0),2)} km  
-Gasolina: R$ {round(t.get('gasto_moto',0),2)}
-
-🚧 Pedágio: R$ {round(t.get('pedagio',0),2)}
-
-⛴ Ferry: R$ {round(t.get('ferry',0),2)}  
-🚌 Bus: R$ {round(t.get('bus',0),2)}  
-✈️ Avião: R$ {round(t.get('aviao',0),2)}
-
----
-""")
+        st.success("Trecho salvo com localização automática!")
 
 # -------------------------
 # MAPA
@@ -260,49 +231,17 @@ elif menu == "Mapa da viagem":
     else:
 
         df = pd.DataFrame(dados)
-
         df = garantir_colunas(df)
 
-        if "lat" in df.columns and "lon" in df.columns:
+        mapa = df[(df["lat"] != 0) & (df["lon"] != 0)]
 
-            mapa = df[(df["lat"] != 0) & (df["lon"] != 0)]
+        if len(mapa) > 0:
 
-            if len(mapa) > 0:
+            st.map(mapa[["lat","lon"]])
 
-                st.map(mapa[["lat","lon"]])
+        else:
 
-            else:
-
-                st.info("Nenhuma coordenada registrada")
-
-# -------------------------
-# ESTATÍSTICAS
-# -------------------------
-
-elif menu == "Estatísticas":
-
-    st.title("📊 Estatísticas")
-
-    if len(dados) == 0:
-
-        st.info("Nenhum dado")
-
-    else:
-
-        df = pd.DataFrame(dados)
-
-        df = garantir_colunas(df)
-
-        combustivel = {
-
-            "Diesel":df["gasto_motorhome"].sum(),
-            "Gasolina":df["gasto_moto"].sum()
-
-        }
-
-        df_g = pd.DataFrame(list(combustivel.items()),columns=["tipo","valor"])
-
-        st.bar_chart(df_g.set_index("tipo"))
+            st.warning("Nenhuma localização encontrada")
 
 # -------------------------
 # BACKUP
@@ -310,34 +249,16 @@ elif menu == "Estatísticas":
 
 elif menu == "Backup da viagem":
 
-    st.title("💾 Backup da viagem")
+    st.title("💾 Backup")
 
-    if len(dados) == 0:
+    backup = json.dumps(dados).encode("utf-8")
 
-        st.info("Nenhum dado")
-
-    else:
-
-        backup = json.dumps(dados).encode("utf-8")
-
-        st.download_button(
-            "Baixar backup da viagem",
-            backup,
-            "backup_viagem.json",
-            "application/json"
-        )
-
-        st.subheader("Restaurar backup")
-
-        arquivo = st.file_uploader("Enviar backup")
-
-        if arquivo is not None:
-
-            dados_restaurados = json.load(arquivo)
-
-            salvar(dados_restaurados)
-
-            st.success("Backup restaurado")
+    st.download_button(
+        "Baixar backup",
+        backup,
+        "backup.json",
+        "application/json"
+    )
 
 # -------------------------
 # CONFIG
@@ -345,8 +266,7 @@ elif menu == "Backup da viagem":
 
 elif menu == "Configurações":
 
-    if st.button("Apagar todos dados"):
+    if st.button("Apagar dados"):
 
         salvar([])
-
         st.success("Dados apagados")
